@@ -1,6 +1,7 @@
 /* @flow */
 
 import * as Dictionary from "../"
+import * as Maybe from "maybe.flow"
 import test from "blue-tape"
 
 test("test exports", async test => {
@@ -58,13 +59,14 @@ test("fromEntries", async test => {
     Sandro: 18
   })
 
-  const map: Map<string, {}> = new Map()
-  map.set("a", { a: 1 })
-  map.set("b", { b: 2 })
+  type User = { id: number }
+  const map: Map<string, User> = new Map()
+  map.set("a", { id: 1 })
+  map.set("b", { id: 2 })
 
   test.deepEqual(Dictionary.fromEntries(map.entries()), {
-    a: { a: 1 },
-    b: { b: 2 }
+    a: { id: 1 },
+    b: { id: 2 }
   })
 })
 
@@ -130,10 +132,12 @@ test("has", async test => {
 test("get", async test => {
   const animals = Dictionary.fromEntries([["Tom", "Cat"], ["Jerry", "Mouse"]])
 
-  test.equal(Dictionary.get("Tom", animals, null), "Cat")
+  test.equal(Dictionary.get("Tom", animals, Maybe.nothing), "Cat")
   test.equal(Dictionary.get("Tom", animals, ""), "Cat")
   test.equal(Dictionary.get("Spike", animals, null), null)
   test.equal(Dictionary.get("Spike", animals, ""), "")
+  test.equal(Dictionary.get("Spike", animals), undefined)
+  test.equal(Dictionary.get("Jerry", animals), "Mouse")
 })
 
 test("entries", async test => {
@@ -173,10 +177,7 @@ test("map", async test => {
 })
 
 test("filter", async test => {
-  const before: Dictionary.Dict<number> = Dictionary.fromEntries([
-    ["a", -1],
-    ["b", 2]
-  ])
+  const before = Dictionary.fromEntries([["a", -1], ["b", 2]])
   test.deepEqual(before, { a: -1, b: 2 })
 
   const after = Dictionary.filter(([_k, v]) => v > 0, before)
@@ -227,9 +228,12 @@ test("diff", async test => {
 
 test("merge", async test => {
   const log = Dictionary.merge(
-    ([key, left], log):string[] => [...log, `- ${key} : ${left}`],
-    ([key, [left, right]], log):string[] => [...log, `= ${key} : ${left} -> ${right}`],
-    ([key, right], log):string[] => [...log, `+ ${key} : ${right}`],
+    ([key, left], log): string[] => [...log, `- ${key} : ${left}`],
+    ([key, [left, right]], log): string[] => [
+      ...log,
+      `= ${key} : ${left} -> ${right}`
+    ],
+    ([key, right], log): string[] => [...log, `+ ${key} : ${right}`],
     Dictionary.fromEntries([["a", 1], ["b", 2]]),
     Dictionary.fromEntries([["b", 18], ["c", 9]]),
     []

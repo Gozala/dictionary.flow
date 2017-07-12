@@ -12,7 +12,10 @@ import type { Maybe } from "maybe.flow"
  * you look up a `User` by a `string` key (such as user names).
  */
 export type Dict<a> = {
-  [key: string]: Maybe<a>
+  [key: string]: Maybe<a>,
+  // `value?` property is here to workaround a bug in flow. For details see:
+  // https://github.com/facebook/flow/issues/4371
+  value?: a
 }
 
 /**
@@ -22,46 +25,55 @@ const Dictionary: Class<Dictionary> = function Dictionary(): void {}
 Dictionary.prototype = Object.freeze(Object.create(null))
 
 /**
- * Create an empty dictionary.
+ * Creates an empty dictionary.
  *
- * ```ts
+ * ```js
  * const v0 = Dictionary.empty()
- * v0 // => <Dict<any>>{}
+ * v0 // => ({}:Dict<*>)
  * const v1 = Dictionary.set('Jack', 1, v0)
- * v1 // => <Dict<any>>{"Jack": 1}
+ * v1 // => ({"Jack": 1}:Dict<number>)
  * const v2 = Dictionary.set('Jane', 'Jane', v1)
- * v2 // => <Dict<any>>{"Jack": 1, "Jane": "Jane"}
+ * v2 // => ({"Jack": 1, "Jane": "Jane"}:Dict<number|string>)
  * ```
  *
- * If optional `dictioray` is passed retuned empty dictionary will be of the
- * same type entries. If ommited it will be of `any` type.
- *
- * ```ts
- * const v$:Dictionary.Dict<number> = Dictionary.empty()
- * v$ // => <Dict<number>>{}
- * const v0 = Dictionary.empty(v$)
- * v0 // => <Dict<number>>{}
- * const v1 = Dictionary.set('Jack', 1, v0)
- * v1 // => <Dict<number>>{Jack: 1}
- * Dictionary.set('Jane', 'Jane', v1) // <- ts: 'Jane' is not a number
+ * Notice that type of values dictionary holds is open and get's extended based
+ * on usage, this is actualy very useful in practice. That being said sometimes
+ * you'd want to put bounds to what dictionary holds ahead you could do it in
+ * multiple ways:
+ * 
+ * ##### Anotate binding
+ * 
+ * ```js
+ * const v3:Dict<number> = Dictionary.empty()
+ * v3 // => ({}:Dict<number>)
+ * const v4 = Dictionary.set('Jack', 1, v3)
+ * v4 // => ({"Jack": 1}:Dict<number>)
+ * const v5 = Dictionary.set('Jane', 'Jane', v1)
  * ```
- *
- * There are two things to notice in the examlpe above:
- *
- *   1. Passing optional `dictionary` is useful as it narrovs down the type of
- *      values that can be inserted into dictionary.
- *   2. Alternatively type can be narroved down via explicit type annotation
- *      as seen on the first line.
+ * 
+ * ##### Enclose in typed function
+ * ```js
+ * const enumerate = (...keys:string[]):Dict<number> => {
+ *   let dict = empty()
+ *   let index = 0
+ *   for (let key of keys) {
+ *     dict = set(key, index++, dict)
+ *   }
+ *   return dict
+ * }
+ * ```
  */
 export const empty = <a>(): Dict<a> => new Dictionary()
 
 /**
  * Create a dictionary with one entry of given key, value pair.
  *
- * ```ts
- * Dictionary.singleton('Zoe', 15) // => <Dict<number>>{Zoe: 15}
- * Dictionary.singleton('a', {foo:"bar"}) // => <Dict<{foo:string}>>{a: {foo:"bar"}}
+ * ```js
+ * Dictionary.singleton('Zoe', 15) // => ({Zoe: 15}:Dict<number>)
+ * Dictionary.singleton('a', {foo:"bar"}) // => ({a: {foo:"bar"}}:Dict<{foo:string}>)
  * ```
+ * 
+ * Note that as with `empty` returned dictionary has open type for values.
  */
 export const singleton = <a>(key: string, value: a): Dict<a> => {
   const result = new Dictionary()
@@ -70,16 +82,16 @@ export const singleton = <a>(key: string, value: a): Dict<a> => {
 }
 
 /**
- * Convert an iterable of `[key, value]` pairs into a dictionary.
+ * Create a dictionary from iterable of `[key, value]` pairs
  *
- * ```ts
+ * ```js
  * Dictionary.fromEntries([
  *    ['Zoe', 17],
  *    ['Sandro', 18]
- * ]) // => <Dict<number>> {Zoe: 17, Sandro: 18}
+ * ]) // => ({Zoe: 17, Sandro: 18}:Dict<number>)
  *
  * Dictionary
- *  .fromEntries((<Map<string, User>>db).entries()) // => <Dict<User>>
+ *  .fromEntries((db:Map<string, User>)).entries()) // => ({...}:Dict<User>)
  * ```
  */
 export const fromEntries = <a>(entries: Iterable<Entry<a>>): Dict<a> => {
@@ -94,17 +106,17 @@ export const fromEntries = <a>(entries: Iterable<Entry<a>>): Dict<a> => {
  * Insert an entry under the given key with a gievn value into a dictionary.
  * Replaces value of the entry if there was one under that key.
  *
- * ```ts
+ * ```js
  * const v0 = Dictionary.fromEntries([["a", 1]])
- * v0 // => <Dict<number>> {a:1}
+ * v0 // => ({a:1}:Dict<number>)
  *
  * // Add
  * const v1 = Dictionary.set("b", 2, v0)
- * v1 // => <Dict<number>> {a:1, b:2}
+ * v1 // => ({a:1, b:2}:Dict<number>)
  *
  * // Replace
  * const v2 = Dictionary.set("b", 15, v1)
- * v2 // => <Dict<number>> {a:1, b:15}
+ * v2 // => ({a:1, b:15}:Dict<number>)
  * ```
  */
 export const set = <a>(key: string, value: a, dict: Dict<a>): Dict<a> => (
@@ -120,31 +132,30 @@ type Updater<a> = Mapper<Maybe<a>, Maybe<a>>
  * removed from the dictionory otherwise it's value is swapped with
  * returned value.
  *
- * ```ts
+ * ```js
  * const v0 = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * v0 // => <Dict<number>>{a:1, b:2}
+ * v0 // => ({a:1, b:2}:Dict<number>)
  *
- * const inc = (v:null|undefined|number):number =>
- *    v == null ? 0 : v + 1
+ * const inc = (v: ?number): ?number => (v == null ? 0 : v + 1)
  *
  * // Add
  * const v1 = Dictionary.update("c", inc, v0)
- * v1 // => <Dict<number>>{a:1, b:2, c:0}
+ * v1 // => ({a:1, b:2, c:0}:Dict<number>)
  *
  * // Modify
  * const v2 = Dictionary.update("b", inc, v1)
- * v2 // => <Dict<number>>{a:1, b:3, c:0}
+ * v2 // => ({a:1, b:3, c:0}:Dict<number>)
  *
  * // Delete
  * const v3 = Dictionary.update("b", _ => null, v2)
- * v3 // => <Dict<number>>{a:1, c:0}
+ * v3 // => ({a:1, c:0}:Dict<number>)
  *
  * const v4 = Dictionary.update("c", _ => undefined, v3)
- * v4 // => <Dict<number>>{a:1}
+ * v4 // => ({a:1}:Dict<number>)
  *
  * // NoOp
  * const v5 = Dictionary.update("d", _ => null, v4)
- * v5 // => <Dict<number>>{a: 1}
+ * v5 // => ({a: 1}:Dict<number>)
  * ```
  */
 export const update = <a>(
@@ -166,12 +177,12 @@ export const update = <a>(
  * Remove an entry for the given key from a dictionary. If there is no entry
  * for the given key no changes are made.
  *
- * ```ts
+ * ```js
  * const before = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * before // => <Dict<number>>{a: 1, b:2}
+ * before // => ({a: 1, b:2}:Dict<number>)
  * const after = Dictionary.remove("a", before)
- * after // => <Dict<number>>{b:2}
- * Diremove("c", after) // => <Dict<number>>{b:2}
+ * after // => ({b:2}:Dict<number>)
+ * Dictionary.remove("c", after) // => ({b:2}:Dict<number>)
  * ```
  */
 export const remove = <a>(key: string, dict: Dict<a>): Dict<a> => (
@@ -182,7 +193,7 @@ export const remove = <a>(key: string, dict: Dict<a>): Dict<a> => (
 /**
  * Determine if there is an entry with a given key is in a dictionary.
  *
- * ```
+ * ```js
  * const dict = Dictionary.singleton("a", 1)
  *
  * Dictionary.has("a", dict) // => true
@@ -192,16 +203,17 @@ export const remove = <a>(key: string, dict: Dict<a>): Dict<a> => (
 export const has = <a>(key: string, dict: Dict<a>): boolean => key in dict
 
 /**
- * Get the value of the entry with a given key and fallback in case if there is
- * no such entry.
+ * Returns value for the give key in the given dictionary or a default passed-in
+ * as a third argument if dictionary has no entry for the give key
  *
- * ```ts
+ * ```js
  * const animals = Dictionary.fromEntries([["Tom", "Cat"], ["Jerry", "Mouse"]])
  *
- * Dictionary.get("Tom", animals, null) => <string|null> "Cat"
- * Dictionary.get("Tom", animals, "") => <string> "Cat"
- * Dictionary.get("Spike", animals, null) => <string|null> null
- * Dictionary.get("Spike", animals, "") => <string> ""
+ * Dictionary.get("Jerry", animals) // => ("Mouse":string|void)
+ * Dictionary.get("Tom", animals, null) // => ("Cat":string|null)
+ * Dictionary.get("Tom", animals, "") // => ("Cat":string)
+ * Dictionary.get("Spike", animals, null) // => (null:string|null)
+ * Dictionary.get("Spike", animals, "") // => ("":string|null)
  * ```
  */
 export const get = <a>(key: string, dict: Dict<a>, fallback: a): a => {
@@ -216,9 +228,9 @@ export const get = <a>(key: string, dict: Dict<a>, fallback: a): a => {
 export type Entry<a> = [string, a]
 
 /**
- * Returns an iterable of dictionary [key, value] pairs using `for of`
+ * Returns an iterable of dictionary `[key, value]` pairs using `for of`
  *
- * ```ts
+ * ```js
  * const dict = Dictionary.singleton('Car', {color:'blue'})
  *
  * for (let [key, value] of Dictionary.entries(dict)) {
@@ -236,9 +248,10 @@ export function* entries<a>(dict: Dict<a>): Iterable<Entry<a>> {
 }
 
 /**
- * Returns an iterable of dictionary keys using `for of`
+ * Returns an iterable of dictionary keys that can be iterated over using
+ * `for of`
  *
- * ```ts
+ * ```js
  * const dict = Dictionary.singleton('Bicycle', {color:'red'})
  *
  * for (let key of Dictionary.keys(dict)) {
@@ -253,9 +266,9 @@ export function* keys<a>(dict: Dict<a>): Iterable<string> {
 }
 
 /**
- * Returns an iterable of dictionary values using `for of`
+ * Returns an iterable of dictionary values that can be iterated over using `for of`
  *
- * ```ts
+ * ```js
  * const dict = Dictionary.singleton('Horse', {color:'black'})
  *
  * for (let value of Dictionary.values(dict)) {
@@ -275,16 +288,15 @@ export function* values<a>(dict: Dict<a>): Iterable<a> {
 type Mapper<a, b> = a => b
 
 /**
- * Creates new dictionary with entries from given dictionary but with it's
- * values mapped via given `f` function.
+ * Maps dictionary entries using given function
  *
- * ```ts
+ * ```js
  * const before = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * before // => <Dict<number>>{a: 1, b: 2}
+ * before // => ({a: 1, b: 2}:Dict<number>)
  *
  * const after = Dictionary.map(([k, v]) =>
  *                               [k.toUpperCase(), String(v + 5)], before)
- * after // => <Dict<string>>{A:"6", B:"7"}
+ * after // => ({A:"6", B:"7"}:Dict<string>)
  * ```
  */
 export const map = <a, b>(
@@ -305,14 +317,14 @@ export const map = <a, b>(
 type Predicate<a> = (input: a) => boolean
 
 /**
- * Keep a dictionary entries when it satisfies a predicate.
+ * Keep a dictionary entries that satisfy provided predicate.
  *
- * ```ts
+ * ```js
  * const before = Dictionary.fromEntries([["a", -1], ["b", 2]])
- * before // => <Dict<number>>{a: -1, b: 2}
+ * before // => ({a: -1, b: 2}:Dict<number>)
  *
  * const after = Dictionary.filter(([_k, v]) => v > 0, before)
- * after // => <Dict<number>>{b: 2}
+ * after // => ({b: 2}:Dict<number>)
  * ```
  */
 export const filter = <a>(p: Predicate<Entry<a>>, dict: Dict<a>): Dict<a> => {
@@ -333,13 +345,13 @@ export const filter = <a>(p: Predicate<Entry<a>>, dict: Dict<a>): Dict<a> => {
  * contains all entries which satisfy the predicate, and the second contains
  * the rest.
  *
- * ```ts
+ * ```js
  * const all = Dictionary.fromEntries([["a", -1], ["b", 2]])
- * all // => <Dict<number>>{a: -1, b: 2}
+ * all // => ({a: -1, b: 2}:Dict<number>)
  *
  * const [positive, negative] = Dictionary.partition(([_k, v]) => v > 0, all)
- * positive // => <Dict<number>>{b: 2}
- * negative // => <Dict<number>>{a: -1}
+ * positive // => ({b: 2}:Dict<number>)
+ * negative // => ({a: -1}:Dict<number>)
  * ```
  */
 export const partition = <a>(
@@ -365,15 +377,15 @@ export const partition = <a>(
  * Combine two dictionaries. If there is a collision, preference is given to
  * the first dictionary.
  *
- * ```ts
+ * ```js
  * const left = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * left // => <Dict<number>>{a:1, b:2}
+ * left // => ({a:1, b:2}:Dict<number>)
  *
  * const right = Dictionary.fromEntries([["b", 18], ["c", 9]])
- * right // => <Dict<number>>{b:18, c:9}
+ * right // => ({b:18, c:9}:Dict<number>)
  *
  * const union = Dictionary.union(left, right)
- * union // => <Dict<number>>{a:1, b:2, c:9}
+ * union // => ({a:1, b:2, c:9}:Dict<number>)
  * ```
  */
 export const union = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
@@ -395,15 +407,15 @@ export const union = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
  * Keep a entries from left dictionary when right dictionary has entries for
  * the same key.
  *
- * ```ts
+ * ```js
  * const left = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * left // => <Dict<number>>{a:1, b:2}
+ * left // => ({a:1, b:2}:Dict<number>)
  *
  * const right = Dictionary.fromEntries([["b", 18], ["c", 9]])
- * right // => <Dict<number>>{b:18, c:9}
+ * right // => ({b:18, c:9}:Dict<number>)
  *
  * const intersect = Dictionary.intersect(left, right)
- * intersect // => <Dict<number>>{b:2}
+ * intersect // => ({b:2}:Dict<number>)
  * ```
  */
 export const intersect = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
@@ -420,13 +432,13 @@ export const intersect = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
  * Keep a entries from left dictionary only if right dictionary does not have
  * entry for that key.
  *
- * ```ts
+ * ```js
  * const left = Dictionary.fromEntries([["a", 1], ["b", 2]])
- * left // => <Dict<number>>{a:1, b:2}
+ * left // => ({a:1, b:2}:Dict<number>)
  * const right = Dictionary.fromEntries([["b", 18], ["c", 9]])
- * right // => <Dict<number>>{b:18, c:9}
- * const diff = Dictionary.diff(left, right)
- * diff // => <Dict<number>>{a:1}
+ * right // => ({b:18, c:9}:Dict<number>)
+ * const delta = Dictionary.diff(left, right)
+ * delta // => ({a:1}:Dict<number>)
  * ```
  */
 export const diff = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
@@ -442,7 +454,7 @@ export const diff = <a>(left: Dict<a>, right: Dict<a>): Dict<a> => {
 export type Accumulator<chunk, result> = (input: chunk, state: result) => result
 
 /**
- *  The most general way of combining two dictionaries. You provide three
+ * The most general way of combining two dictionaries. You provide three
  * accumulators for when a given key appears:
  *
  * - Only in the left dictionary.
@@ -452,17 +464,18 @@ export type Accumulator<chunk, result> = (input: chunk, state: result) => result
  * You then traverse all the keys from lowest to highest, building up whatever
  * you want.
  *
- * ```ts
+ * ```js
  * Dictionary.merge(
- *   ([key, left], log) =>
+ *   ([key, left], log):string[] =>
  *      [...log, `- ${key} : ${left}`],
- *   ([key, [left, right]], log) =>
+ *   ([key, [left, right]], log):string[] =>
  *      [...log, `= ${key} : ${left} -> ${right}`],
- *   ([key, right], log) =>
+ *   ([key, right], log):string[] =>
  *      [...log, `+ ${key} : ${right}`],
  *   Dictionary.fromEntries([["a", 1], ["b", 2]]),
  *   Dictionary.fromEntries([["b", 18], ["c", 9]]),
- *   <string[]>[]) // => ['- a : 1', '= b : 2 -> 18', '+ c : 9']
+ *   []
+ * ) // => ['- a : 1', '= b : 2 -> 18', '+ c : 9']
  * ```
  */
 export const merge = <a, b, result>(

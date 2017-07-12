@@ -1,12 +1,8 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "name": "dictionary.flow",
-  "description": "Library for working with dictionaries",
-  "keywords": [
-    "dictionary",
-    "typed",
-    "flow"
-  ],
+  "description": "Library for working with typed dictionaries",
+  "keywords": ["dictionary", "typed", "flow"],
   "main": "lib/Dictionary",
   "module": "src/Dictionary",
   "author": "Irakli Gozalishvili <rfobic@gmail.com> (http://jeditoolkit.com)",
@@ -39,12 +35,9 @@
     "start": "flow-copy-source --watch --verbose src lib & babel --watch --out-dir lib src"
   },
   "lint-staged": {
-    "*.js": [
-      "prettier --parser flow --no-semi --write",
-      "git add"
-    ]
+    "*.js": ["prettier --parser flow --no-semi --write", "git add"]
   },
   "dependencies": {
-    "maybe.flow": "^0.2.0"
+    "maybe.flow": "^0.3.0"
   }
 }
